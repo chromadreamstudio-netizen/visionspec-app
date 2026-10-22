@@ -1,0 +1,33 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// تم التحويل إلى PostgreSQL (Supabase) للعمل على بيئة الإنتاج السحابية
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Session {
+  id          String    @id
+  shop        String
+  state       String
+  isOnline    Boolean   @default(false)
+  scope       String?
+  expires     DateTime?
+  accessToken String
+  userId      BigInt?
+}
+
+// 🌟 الجدول لحفظ إعدادات وتفضيلات التاجر
+model StoreSettings {
+  id          Int      @id @default(autoincrement())
+  shop        String   @unique
+  language    String   @default("English")
+  tableColor  String   @default("#f9fafb")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
