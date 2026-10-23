@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
 import { authenticate, PREMIUM_PLAN } from "../shopify.server";
@@ -47,7 +47,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "generate");
 
-  // ✅ نظام الاشتراكات الصحيح 100% حسب توثيق شوبيفاي
+  // 🔥 الحل الجذري والنهائي لنظام الدفع 🔥
   if (intent === "upgrade") {
     try {
       await billing.require({
@@ -55,14 +55,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         isTest: true,
         onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
       });
-      // إذا كان مشتركاً بالفعل، نرسل رسالة نجاح
-      return { success: true, message: "Subscription is already active! 🎉" }; 
+      
+      // إذا كان التاجر مشتركاً بالفعل، نعيده إلى التطبيق فوراً
+      const storeName = session.shop.split(".")[0];
+      const appUrl = `https://admin.shopify.com/store/${storeName}/apps/beneficial-valuation-app-10`;
+      return new Response(null, { status: 302, headers: { Location: appUrl } });
+      
     } catch (error: any) {
-      // شوبيفاي تستخدم Response لعمل Redirect، يجب أن نسمح له بالمرور
-      if (error instanceof Response) {
-        throw error; 
-      }
-      return { success: false, error: "Billing redirect failed. Please try again." };
+      // شوبيفاي سترسل توجيه الدفع، وسيقوم المتصفح باتباعه إجبارياً
+      throw error;
     }
   }
 
@@ -254,19 +255,7 @@ function ProductRow({ product }: { product: any }) {
 // 4. الصفحة الرئيسية + ميزة التوليد الجماعي
 export default function Index() {
   const { products, hasApiKey } = useLoaderData<typeof loader>();
-  const billingFetcher = useFetcher<typeof action>();
   
-  // ✅ مراقب توجيه الفواتير (لإظهار التنبيهات في حال كان الحساب مفعلاً)
-  useEffect(() => {
-    if (billingFetcher.data) {
-      if (billingFetcher.data.success && billingFetcher.data.message) {
-        alert(billingFetcher.data.message);
-      } else if (billingFetcher.data.error) {
-        alert("❌ Error: " + billingFetcher.data.error);
-      }
-    }
-  }, [billingFetcher.data]);
-
   const [isBulkScanning, setIsBulkScanning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
 
@@ -306,8 +295,6 @@ export default function Index() {
     window.location.reload();
   };
 
-  const isBillingLoading = billingFetcher.state !== "idle";
-
   return (
     // @ts-ignore
     <s-page heading="VisionSpec AI — Smart Specs & EU GPSR Compliance">
@@ -332,12 +319,13 @@ export default function Index() {
               {isBulkScanning ? `🔄 Scanning (${bulkProgress}%)...` : "⚡ Auto-Generate Missing Specs"}
             </button>
 
-            <billingFetcher.Form method="post" action="?index">
+            {/* 🔥 فرم الدفع المباشر (يخترق الحظر ويفتح شاشة شوبيفاي إجبارياً) 🔥 */}
+            <form method="POST" action="?index" target="_top">
               <input type="hidden" name="intent" value="upgrade" />
-              <button type="submit" disabled={isBillingLoading} style={{ backgroundColor: isBillingLoading ? "#6d7175" : "#005bd3", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: isBillingLoading ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "13px" }}>
-                {isBillingLoading ? "⏳ Loading..." : "💳 Test Billing"}
+              <button type="submit" style={{ backgroundColor: "#005bd3", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>
+                💳 Test Billing
               </button>
-            </billingFetcher.Form>
+            </form>
           </div>
         </div>
       {/* @ts-ignore */}
@@ -345,12 +333,4 @@ export default function Index() {
 
       {/* @ts-ignore */}
       <s-section heading="Store Products Scanner">
-        <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-          {products.length === 0 ? <p>No products found.</p> : products.map((p: any) => <ProductRow key={p.id} product={p} />)}
-        </div>
-      {/* @ts-ignore */}
-      </s-section>
-    {/* @ts-ignore */}
-    </s-page>
-  );
-}
+        <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px
