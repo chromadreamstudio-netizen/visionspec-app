@@ -55,7 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         isTest: true,
         onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
       });
-      return { success: true, message: "Subscription is active!" }; 
+      return { success: true, message: "Subscription is already active! 🎉" }; 
     } catch (error: any) {
       if (error instanceof Response) {
         // استخراج رابط الدفع من السيرفر وإرساله للواجهة لفتحه بأمان
@@ -64,7 +64,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           return { redirectUrl: url };
         }
       }
-      return { success: false, error: "Billing redirect failed" };
+      return { success: false, error: "Billing redirect failed. Please try again." };
     }
   }
 
@@ -195,7 +195,7 @@ Generate clean HTML (no markdown) containing:
   return new Response("Invalid intent", { status: 400 });
 };
 
-// 3. تصميم صف المنتج مع المعاينة المباشرة (التصميم الأصلي الخاص بك)
+// 3. تصميم صف المنتج مع المعاينة المباشرة
 function ProductRow({ product }: { product: any }) {
   const fetcher = useFetcher<typeof action>();
   const [showPreview, setShowPreview] = useState(false);
@@ -258,10 +258,16 @@ export default function Index() {
   const { products, hasApiKey } = useLoaderData<typeof loader>();
   const billingFetcher = useFetcher<typeof action>();
   
-  // ✅ مراقب توجيه الفواتير (لفتح صفحة الدفع بأمان وتخطي حظر الـ iframe)
+  // ✅ مراقب توجيه الفواتير (لإظهار التنبيهات أو فتح صفحة الدفع)
   useEffect(() => {
-    if (billingFetcher.data?.redirectUrl) {
-      window.open(billingFetcher.data.redirectUrl, "_top");
+    if (billingFetcher.data) {
+      if (billingFetcher.data.redirectUrl) {
+        window.open(billingFetcher.data.redirectUrl, "_top");
+      } else if (billingFetcher.data.success && billingFetcher.data.message) {
+        alert(billingFetcher.data.message);
+      } else if (billingFetcher.data.error) {
+        alert("❌ Error: " + billingFetcher.data.error);
+      }
     }
   }, [billingFetcher.data]);
 
@@ -296,7 +302,6 @@ export default function Index() {
       completed += 1;
       setBulkProgress(Math.round((completed / productsMissingSpecs.length) * 100));
       
-      // ✅ فاصل زمني لتجنب حظر السيرفر
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
@@ -304,6 +309,8 @@ export default function Index() {
     setBulkProgress(0);
     window.location.reload();
   };
+
+  const isBillingLoading = billingFetcher.state !== "idle";
 
   return (
     // @ts-ignore
@@ -331,7 +338,9 @@ export default function Index() {
 
             <billingFetcher.Form method="post" action="?index">
               <input type="hidden" name="intent" value="upgrade" />
-              <button type="submit" style={{ backgroundColor: "#005bd3", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>💳 Test Billing</button>
+              <button type="submit" disabled={isBillingLoading} style={{ backgroundColor: isBillingLoading ? "#6d7175" : "#005bd3", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: isBillingLoading ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "13px" }}>
+                {isBillingLoading ? "⏳ Loading..." : "💳 Test Billing"}
+              </button>
             </billingFetcher.Form>
           </div>
         </div>
