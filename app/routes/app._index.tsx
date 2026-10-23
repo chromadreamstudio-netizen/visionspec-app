@@ -4,7 +4,6 @@ import { useLoaderData, useFetcher } from "react-router";
 import { authenticate, PREMIUM_PLAN } from "../shopify.server";
 import prisma from "../db.server";
 
-// 1. جلب المنتجات
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin } = await authenticate.admin(request);
 
@@ -41,13 +40,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { products, hasApiKey };
 };
 
-// 2. معالجة الذكاء الاصطناعي واللغات والفواتير
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, billing, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "generate");
 
-  // 🔥 الحل الجذري والنهائي لنظام الدفع 🔥
   if (intent === "upgrade") {
     try {
       await billing.require({
@@ -56,13 +53,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
       });
       
-      // إذا كان التاجر مشتركاً بالفعل، نعيده إلى التطبيق فوراً
       const storeName = session.shop.split(".")[0];
       const appUrl = `https://admin.shopify.com/store/${storeName}/apps/beneficial-valuation-app-10`;
       return new Response(null, { status: 302, headers: { Location: appUrl } });
       
     } catch (error: any) {
-      // شوبيفاي سترسل توجيه الدفع، وسيقوم المتصفح باتباعه إجبارياً
       throw error;
     }
   }
@@ -194,7 +189,6 @@ Generate clean HTML (no markdown) containing:
   return new Response("Invalid intent", { status: 400 });
 };
 
-// 3. تصميم صف المنتج مع المعاينة المباشرة
 function ProductRow({ product }: { product: any }) {
   const fetcher = useFetcher<typeof action>();
   const [showPreview, setShowPreview] = useState(false);
@@ -218,16 +212,16 @@ function ProductRow({ product }: { product: any }) {
           <div>
             <div style={{ fontWeight: 600, fontSize: "15px", color: "#202223" }}>{product.title}</div>
             <div style={{ fontSize: "13px", color: hasSpecs ? "#008060" : "#d82c0d", marginTop: "4px", fontWeight: 600 }}>
-              {hasSpecs ? "✅ Specs & Compliance Table Active" : "⚠️ Missing Specs & Compliance Table"}
+              {hasSpecs ? "Specs & Compliance Table Active" : "Missing Specs"}
             </div>
-            {justUpdated && <div style={{ fontSize: "12px", color: "#005bd3", marginTop: "4px", fontWeight: 500 }}>🎉 Updated at {fetcher.data?.timestamp} via {fetcher.data?.source}</div>}
+            {justUpdated && <div style={{ fontSize: "12px", color: "#005bd3", marginTop: "4px", fontWeight: 500 }}>Updated at {fetcher.data?.timestamp}</div>}
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           {hasSpecs && (
             <button type="button" onClick={() => setShowPreview(!showPreview)} style={{ backgroundColor: "#f1f2f4", color: "#202223", border: "1px solid #c9cccf", padding: "9px 14px", borderRadius: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>
-              {showPreview ? "🔼 Hide Table" : "👁️ Preview Specs"}
+              {showPreview ? "Hide Table" : "Preview Specs"}
             </button>
           )}
 
@@ -237,7 +231,7 @@ function ProductRow({ product }: { product: any }) {
             <input type="hidden" name="title" value={product.title} />
             <input type="hidden" name="imageUrl" value={imageUrl} />
             <button type="submit" disabled={isGenerating} style={{ backgroundColor: isGenerating ? "#6d7175" : hasSpecs ? "#008060" : "#1a1a1a", color: "#ffffff", border: "none", padding: "10px 18px", borderRadius: "8px", cursor: isGenerating ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "13px" }}>
-              {isGenerating ? "⏳ Analyzing Image with AI..." : hasSpecs ? "🔄 Regenerate Specs" : "✨ Generate Specs with AI"}
+              {isGenerating ? "Analyzing Image..." : hasSpecs ? "Regenerate" : "Generate AI Specs"}
             </button>
           </fetcher.Form>
         </div>
@@ -252,7 +246,6 @@ function ProductRow({ product }: { product: any }) {
   );
 }
 
-// 4. الصفحة الرئيسية + ميزة التوليد الجماعي
 export default function Index() {
   const { products, hasApiKey } = useLoaderData<typeof loader>();
   
@@ -266,7 +259,7 @@ export default function Index() {
     );
 
     if (productsMissingSpecs.length === 0) {
-      alert("🎉 All products already have AI Specs!");
+      alert("All products already have AI Specs!");
       setIsBulkScanning(false);
       return;
     }
@@ -286,7 +279,6 @@ export default function Index() {
 
       completed += 1;
       setBulkProgress(Math.round((completed / productsMissingSpecs.length) * 100));
-      
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
@@ -303,7 +295,7 @@ export default function Index() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", backgroundColor: "#f8f9fa", border: "1px solid #dfe3e8", borderRadius: "10px", marginBottom: "8px", flexWrap: "wrap", gap: "10px" }}>
           <div>
             <div style={{ fontWeight: 600, fontSize: "14px", color: "#202223" }}>
-              AI Optical Engine: <span style={{ color: hasApiKey ? "#008060" : "#d82c0d" }}>{hasApiKey ? "🟢 Gemini API Connected" : "🟠 Fallback Mode"}</span>
+              AI Optical Engine: <span style={{ color: hasApiKey ? "#008060" : "#d82c0d" }}>{hasApiKey ? "Gemini API Connected" : "Fallback Mode"}</span>
             </div>
             <div style={{ fontSize: "12px", color: "#637381", marginTop: "4px" }}>
               Current Plan: <strong>VisionSpec Pro ($19/mo)</strong>
@@ -316,14 +308,13 @@ export default function Index() {
               disabled={isBulkScanning}
               style={{ backgroundColor: isBulkScanning ? "#6d7175" : "#1a1a1a", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: isBulkScanning ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "13px" }}
             >
-              {isBulkScanning ? `🔄 Scanning (${bulkProgress}%)...` : "⚡ Auto-Generate Missing Specs"}
+              {isBulkScanning ? `Scanning (${bulkProgress}%)...` : "Auto-Generate Missing Specs"}
             </button>
 
-            {/* 🔥 فرم الدفع المباشر (يخترق الحظر ويفتح شاشة شوبيفاي إجبارياً) 🔥 */}
             <form method="POST" action="?index" target="_top">
               <input type="hidden" name="intent" value="upgrade" />
               <button type="submit" style={{ backgroundColor: "#005bd3", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>
-                💳 Test Billing
+                Test Billing
               </button>
             </form>
           </div>
@@ -333,4 +324,12 @@ export default function Index() {
 
       {/* @ts-ignore */}
       <s-section heading="Store Products Scanner">
-        <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px
+        <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          {products.length === 0 ? <p>No products found.</p> : products.map((p: any) => <ProductRow key={p.id} product={p} />)}
+        </div>
+      {/* @ts-ignore */}
+      </s-section>
+    {/* @ts-ignore */}
+    </s-page>
+  );
+}
