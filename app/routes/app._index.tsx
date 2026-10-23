@@ -1,8 +1,22 @@
 import { useState } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useLoaderData, useFetcher } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
+import { useLoaderData, useFetcher } from "@remix-run/react";
 import { authenticate, PREMIUM_PLAN } from "../shopify.server";
 import prisma from "../db.server";
+import {
+  Page,
+  Layout,
+  Card,
+  BlockStack,
+  Text,
+  Badge,
+  Button,
+  Thumbnail,
+  InlineStack,
+  Box,
+  Divider
+} from "@shopify/polaris";
 
 // 1. جلب المنتجات
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -38,31 +52,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 10
   );
 
-  return { products, hasApiKey };
+  return json({ products, hasApiKey });
 };
 
 // 2. معالجة الذكاء الاصطناعي واللغات والفواتير
 export const action = async ({ request }: ActionFunctionArgs) => {
-  try {
-    const { admin, billing, session } = await authenticate.admin(request);
-    const formData = await request.formData();
-    const intent = String(formData.get("intent") || "generate");
+  const { admin, billing, session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") || "generate");
 
-    // نظام الاشتراكات
-    if (intent === "upgrade") {
-      try {
-        await billing.require({
-          plans: [PREMIUM_PLAN],
-          isTest: true,
-          onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
-        });
-        return { success: true, billingMessage: "✅ Active Subscription Confirmed!" };
-      } catch (err: any) {
-        if (err instanceof Response) throw err;
-        return { success: false, billingMessage: "⚠️ Please set app to Public Distribution in Shopify Partners to enable billing." };
-      }
-    }
+  // نظام الاشتراكات
+  if (intent === "upgrade") {
+    await billing.require({
+      plans: [PREMIUM_PLAN],
+      isTest: true,
+      onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
+    });
+    return null; // سيتم إعادة التوجيه تلقائياً
+  }
 
+  if (intent === "generate") {
     const productId = String(formData.get("productId") || "");
     const title = String(formData.get("title") || "");
     const imageUrl = String(formData.get("imageUrl") || "");
@@ -177,7 +186,7 @@ Generate clean HTML (no markdown) containing:
       `;
     }
 
-    const updateRes = await admin.graphql(
+    await admin.graphql(
       `#graphql
         mutation updateProductSpecs($input: ProductInput!) {
           productUpdate(input: $input) {
@@ -187,11 +196,10 @@ Generate clean HTML (no markdown) containing:
       { variables: { input: { id: productId, descriptionHtml: generatedHtml } } }
     );
 
-    return { success: true, productId, source: source + aiDiagnostic, generatedHtml, timestamp: new Date().toLocaleTimeString() };
-  } catch (err: any) {
-    if (err instanceof Response) throw err;
-    return { success: false, error: err?.message || "Error", timestamp: new Date().toLocaleTimeString() };
+    return json({ success: true, productId, source: source + aiDiagnostic, generatedHtml, timestamp: new Date().toLocaleTimeString() });
   }
+
+  return json({ success: false, error: "Invalid intent" }, { status: 400 });
 };
 
 // 3. تصميم صف المنتج مع المعاينة المباشرة
@@ -206,49 +214,52 @@ function ProductRow({ product }: { product: any }) {
   const justUpdated = Boolean(fetcher.data?.success && fetcher.data?.productId);
 
   return (
-    <div style={{ border: justUpdated ? "2px solid #008060" : "1px solid #e1e3e5", borderRadius: "10px", backgroundColor: "#ffffff", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          {imageUrl ? (
-            <img src={imageUrl} alt={product.title} style={{ width: "56px", height: "56px", objectFit: "cover", borderRadius: "8px", border: "1px solid #dfe3e8" }} />
-          ) : (
-            <div style={{ width: "56px", height: "56px", borderRadius: "8px", backgroundColor: "#f4f6f8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", color: "#637381", border: "1px solid #dfe3e8" }}>No Image</div>
-          )}
+    <Card padding="400">
+      <BlockStack gap="400">
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="400" blockAlign="center">
+            {imageUrl ? (
+              <Thumbnail source={imageUrl} alt={product.title} size="large" />
+            ) : (
+              <Box background="bg-surface-secondary" minHeight="56px" minWidth="56px" borderRadius="100" />
+            )}
+            <BlockStack gap="100">
+              <Text as="h3" variant="headingMd">{product.title}</Text>
+              {hasSpecs ? (
+                <Badge tone="success">✅ Specs & Compliance Table Active</Badge>
+              ) : (
+                <Badge tone="critical">⚠️ Missing Specs</Badge>
+              )}
+              {justUpdated && <Text as="p" tone="magic" variant="bodySm">🎉 Updated via {fetcher.data?.source}</Text>}
+            </BlockStack>
+          </InlineStack>
 
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "15px", color: "#202223" }}>{product.title}</div>
-            <div style={{ fontSize: "13px", color: hasSpecs ? "#008060" : "#d82c0d", marginTop: "4px", fontWeight: 600 }}>
-              {hasSpecs ? "✅ Specs & Compliance Table Active" : "⚠️ Missing Specs & Compliance Table"}
-            </div>
-            {justUpdated && <div style={{ fontSize: "12px", color: "#005bd3", marginTop: "4px", fontWeight: 500 }}>🎉 Updated at {fetcher.data?.timestamp} via {fetcher.data?.source}</div>}
-          </div>
-        </div>
+          <InlineStack gap="200">
+            {hasSpecs && (
+              <Button onClick={() => setShowPreview(!showPreview)}>
+                {showPreview ? "Hide Table" : "Preview Specs"}
+              </Button>
+            )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          {hasSpecs && (
-            <button type="button" onClick={() => setShowPreview(!showPreview)} style={{ backgroundColor: "#f1f2f4", color: "#202223", border: "1px solid #c9cccf", padding: "9px 14px", borderRadius: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>
-              {showPreview ? "🔼 Hide Table" : "👁️ Preview Specs"}
-            </button>
-          )}
+            <fetcher.Form method="post" action="?index" onSubmit={() => setShowPreview(true)}>
+              <input type="hidden" name="intent" value="generate" />
+              <input type="hidden" name="productId" value={product.id} />
+              <input type="hidden" name="title" value={product.title} />
+              <input type="hidden" name="imageUrl" value={imageUrl} />
+              <Button variant="primary" tone={hasSpecs ? "success" : undefined} submit loading={isGenerating}>
+                {hasSpecs ? "Regenerate Specs" : "✨ Generate AI Specs"}
+              </Button>
+            </fetcher.Form>
+          </InlineStack>
+        </InlineStack>
 
-          <fetcher.Form method="post" action="?index" onSubmit={() => setShowPreview(true)}>
-            <input type="hidden" name="intent" value="generate" />
-            <input type="hidden" name="productId" value={product.id} />
-            <input type="hidden" name="title" value={product.title} />
-            <input type="hidden" name="imageUrl" value={imageUrl} />
-            <button type="submit" disabled={isGenerating} style={{ backgroundColor: isGenerating ? "#6d7175" : hasSpecs ? "#008060" : "#1a1a1a", color: "#ffffff", border: "none", padding: "10px 18px", borderRadius: "8px", cursor: isGenerating ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "13px" }}>
-              {isGenerating ? "⏳ Analyzing Image with AI..." : hasSpecs ? "🔄 Regenerate Specs" : "✨ Generate Specs with AI"}
-            </button>
-          </fetcher.Form>
-        </div>
-      </div>
-
-      {showPreview && hasSpecs && (
-        <div style={{ padding: "16px 20px", backgroundColor: "#fafbfb", borderTop: "1px solid #e1e3e5" }}>
-          <div style={{ backgroundColor: "#ffffff", padding: "16px", borderRadius: "8px", border: "1px solid #dfe3e8" }} dangerouslySetInnerHTML={{ __html: currentHtml }} />
-        </div>
-      )}
-    </div>
+        {showPreview && hasSpecs && (
+          <Box padding="400" background="bg-surface-secondary" borderRadius="100">
+            <div dangerouslySetInnerHTML={{ __html: currentHtml }} />
+          </Box>
+        )}
+      </BlockStack>
+    </Card>
   );
 }
 
@@ -291,6 +302,9 @@ export default function Index() {
 
       completed += 1;
       setBulkProgress(Math.round((completed / productsMissingSpecs.length) * 100));
+      
+      // ✅ فاصل زمني لتجنب الحظر من خوادم Gemini
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     setIsBulkScanning(false);
@@ -300,41 +314,57 @@ export default function Index() {
   };
 
   return (
-    <s-page heading="VisionSpec AI — Smart Specs & EU GPSR Compliance">
-      <s-section heading="System Status & Bulk Engine">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", backgroundColor: "#f8f9fa", border: "1px solid #dfe3e8", borderRadius: "10px", marginBottom: "8px", flexWrap: "wrap", gap: "10px" }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "14px", color: "#202223" }}>
-              AI Optical Engine: <span style={{ color: hasApiKey ? "#008060" : "#d82c0d" }}>{hasApiKey ? "🟢 Gemini API Connected" : "🟠 Fallback Mode"}</span>
-            </div>
-            <div style={{ fontSize: "12px", color: "#637381", marginTop: "4px" }}>
-              Current Plan: <strong>VisionSpec Pro ($19/mo)</strong>
-            </div>
-          </div>
-          
-          <div style={{ display: "flex", gap: "10px" }}>
-            {/* زر التوليد الجماعي السحري */}
-            <button 
-              onClick={startBulkScan}
-              disabled={isBulkScanning}
-              style={{ backgroundColor: isBulkScanning ? "#6d7175" : "#1a1a1a", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: isBulkScanning ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "13px" }}
-            >
-              {isBulkScanning ? `🔄 Scanning (${bulkProgress}%)...` : "⚡ Auto-Generate Missing Specs"}
-            </button>
+    <Page title="VisionSpec AI — Smart Specs & EU GPSR Compliance">
+      <Layout>
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">System Status & Bulk Engine</Text>
+              <Divider />
+              <InlineStack align="space-between" blockAlign="center">
+                <BlockStack gap="100">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Text as="span" fontWeight="semibold">AI Optical Engine:</Text>
+                    {hasApiKey ? (
+                      <Badge tone="success">🟢 Gemini API Connected</Badge>
+                    ) : (
+                      <Badge tone="warning">🟠 Fallback Mode</Badge>
+                    )}
+                  </InlineStack>
+                  <Text as="span" tone="subdued">Current Plan: <strong>VisionSpec Pro ($19/mo)</strong></Text>
+                </BlockStack>
+                
+                <InlineStack gap="200">
+                  {/* زر التوليد الجماعي السحري */}
+                  <Button 
+                    onClick={startBulkScan}
+                    disabled={isBulkScanning}
+                    loading={isBulkScanning}
+                  >
+                    {isBulkScanning ? `🔄 Scanning (${bulkProgress}%)...` : "⚡ Auto-Generate Missing Specs"}
+                  </Button>
 
-            <billingFetcher.Form method="post" action="?index">
-              <input type="hidden" name="intent" value="upgrade" />
-              <button type="submit" style={{ backgroundColor: "#005bd3", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: "pointer", fontWeight: 600, fontSize: "13px" }}>💳 Test Billing</button>
-            </billingFetcher.Form>
-          </div>
-        </div>
-      </s-section>
+                  <billingFetcher.Form method="post" action="?index">
+                    <input type="hidden" name="intent" value="upgrade" />
+                    <Button variant="primary" submit>💳 Test Billing</Button>
+                  </billingFetcher.Form>
+                </InlineStack>
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
 
-      <s-section heading="Store Products Scanner">
-        <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-          {products.length === 0 ? <p>No products found.</p> : products.map((p: any) => <ProductRow key={p.id} product={p} />)}
-        </div>
-      </s-section>
-    </s-page>
+        <Layout.Section>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">Store Products Scanner</Text>
+            {products.length === 0 ? (
+              <Card padding="400"><Text as="p">No products found.</Text></Card>
+            ) : (
+              products.map((p: any) => <ProductRow key={p.id} product={p} />)
+            )}
+          </BlockStack>
+        </Layout.Section>
+      </Layout>
+    </Page>
   );
 }

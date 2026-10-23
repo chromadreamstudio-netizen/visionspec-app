@@ -4,6 +4,7 @@ import {
   AppDistribution,
   shopifyApp,
   BillingInterval,
+  DeliveryMethod, // ✅ أضفنا هذه لاستخدامها في الـ Webhooks
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
@@ -33,6 +34,15 @@ const shopify = shopifyApp({
       ],
     },
   },
+
+  // ✅ إضافة الـ Webhooks المطلوبة أساسياً لمراجعة شوبيفاي
+  webhooks: {
+    APP_UNINSTALLED: {
+      deliveryMethod: DeliveryMethod.Http,
+      callbackUrl: "/webhooks",
+    },
+  },
+
   future: {
     unstable_newEmbeddedAuthStrategy: true,
   },
@@ -45,6 +55,7 @@ export default shopify;
 export const apiVersion = shopify.apiVersion;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 export const authenticate = shopify.authenticate;
+// ✅ تم إصلاح الخطأ البرمجي هنا
 export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
