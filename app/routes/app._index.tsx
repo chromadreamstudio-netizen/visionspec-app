@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useLoaderData, useFetcher } from "react-router";
 import { authenticate, PREMIUM_PLAN } from "../shopify.server";
@@ -47,14 +47,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "generate");
 
-  // ✅ نظام الاشتراكات الآمن
+  // ✅ نظام الاشتراكات الآمن (مع تخطي حظر الـ iframe)
   if (intent === "upgrade") {
-    await billing.require({
-      plans: [PREMIUM_PLAN],
-      isTest: true,
-      onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
-    });
-    return null; 
+    try {
+      await billing.require({
+        plans: [PREMIUM_PLAN],
+        isTest: true,
+        onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
+      });
+      return { success: true, message: "Subscription is active!" }; 
+    } catch (error: any) {
+      if (error instanceof Response) {
+        // استخراج رابط الدفع من السيرفر وإرساله للواجهة لفتحه بأمان
+        const url = error.headers.get("Location") || error.headers.get("X-Shopify-API-Request-Failure-Reauthorize-Url");
+        if (url) {
+          return { redirectUrl: url };
+        }
+      }
+      return { success: false, error: "Billing redirect failed" };
+    }
   }
 
   if (intent === "generate") {
@@ -247,6 +258,13 @@ export default function Index() {
   const { products, hasApiKey } = useLoaderData<typeof loader>();
   const billingFetcher = useFetcher<typeof action>();
   
+  // ✅ مراقب توجيه الفواتير (لفتح صفحة الدفع بأمان وتخطي حظر الـ iframe)
+  useEffect(() => {
+    if (billingFetcher.data?.redirectUrl) {
+      window.open(billingFetcher.data.redirectUrl, "_top");
+    }
+  }, [billingFetcher.data]);
+
   const [isBulkScanning, setIsBulkScanning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
 
