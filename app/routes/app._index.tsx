@@ -1,7 +1,6 @@
 import { useState } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher } from "@remix-run/react";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { useLoaderData, useFetcher } from "react-router";
 import { authenticate, PREMIUM_PLAN } from "../shopify.server";
 import prisma from "../db.server";
 import {
@@ -52,7 +51,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 10
   );
 
-  return json({ products, hasApiKey });
+  return { products, hasApiKey };
 };
 
 // 2. معالجة الذكاء الاصطناعي واللغات والفواتير
@@ -68,7 +67,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       isTest: true,
       onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
     });
-    return null; // سيتم إعادة التوجيه تلقائياً
+    return null; 
   }
 
   if (intent === "generate") {
@@ -76,7 +75,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const title = String(formData.get("title") || "");
     const imageUrl = String(formData.get("imageUrl") || "");
 
-    // ✅ قراءة اللغة واللون من قاعدة بيانات التاجر
     const settings = await prisma.storeSettings.findUnique({
       where: { shop: session.shop },
     });
@@ -95,7 +93,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const base64Image = Buffer.from(arrayBuffer).toString("base64");
         const mimeType = imgRes.headers.get("content-type") || "image/jpeg";
 
-        // ✅ إجبار الذكاء الاصطناعي على اللغة واللون
         const prompt = `You are an expert e-commerce product AI.
 CRITICAL: You MUST write the ENTIRE output strictly in ${outputLanguage}.
 Analyze this product image and title ("${title}").
@@ -104,12 +101,11 @@ Generate clean HTML (no markdown) containing:
 2. An HTML table (<h3>📋 Specs</h3>) with specs extracted from the image. Translate all headers and values to ${outputLanguage}. Use background color "${tableColor}" for alternate rows (e.g., tr:nth-child(even)).
 3. An EU GPSR compliance warning box in ${outputLanguage}.`;
 
-        // ✅ استخدام gemini-3.6-flash مع احتياطي
         const modelsToTry = Array.from(new Set([process.env.GEMINI_MODEL?.trim() || "gemini-3.6-flash", "gemini-2.5-flash"]));
 
         for (const model of modelsToTry) {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 ثانية لمعالجة الصور
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
 
           try {
             const geminiRes = await fetch(
@@ -148,7 +144,6 @@ Generate clean HTML (no markdown) containing:
       }
     }
 
-    // ✅ قاموس اللغات للقالب الاحتياطي (يعمل بلغتك المفضلة حتى لو فشل الاتصال بجوجل)
     const t: Record<string, any> = {
       English: { specs: "📋 Technical Specifications", model: "Product Model", mat: "Primary Material", matVal: "Premium Eco-Friendly Composite", stat: "Visual Inspection", statVal: "Verified via VisionSpec AI", care: "Care & Maintenance", careVal: "Easy-wipe surface", war: "Warranty & Quality", warVal: "12-Month Guarantee", safe: "🛡️ EU GPSR & Safety Compliance", safeMsg: "Safety Notice: Keep away from open flames. Complies with EU 2023/988 standards." },
       Arabic: { specs: "📋 المواصفات الفنية", model: "طراز المنتج", mat: "المادة الأساسية", matVal: "مواد صديقة للبيئة وآمنة", stat: "الفحص البصري", statVal: "تم التحقق بواسطة VisionSpec AI", care: "العناية والصيانة", careVal: "سطح سهل المسح والتنظيف", war: "الضمان والجودة", warVal: "ضمان جودة لمدة 12 شهراً", safe: "🛡️ امتثال السلامة الأوروبي (EU GPSR)", safeMsg: "ملاحظة سلامة: يُحفظ بعيداً عن اللهب. متوافق مع معايير السلامة الأوروبية 2023/988." },
@@ -196,13 +191,13 @@ Generate clean HTML (no markdown) containing:
       { variables: { input: { id: productId, descriptionHtml: generatedHtml } } }
     );
 
-    return json({ success: true, productId, source: source + aiDiagnostic, generatedHtml, timestamp: new Date().toLocaleTimeString() });
+    return { success: true, productId, source: source + aiDiagnostic, generatedHtml, timestamp: new Date().toLocaleTimeString() };
   }
 
-  return json({ success: false, error: "Invalid intent" }, { status: 400 });
+  return new Response("Invalid intent", { status: 400 });
 };
 
-// 3. تصميم صف المنتج مع المعاينة المباشرة
+// 3. تصميم صف المنتج
 function ProductRow({ product }: { product: any }) {
   const fetcher = useFetcher<typeof action>();
   const [showPreview, setShowPreview] = useState(false);
@@ -263,19 +258,16 @@ function ProductRow({ product }: { product: any }) {
   );
 }
 
-// 4. الصفحة الرئيسية + ميزة التوليد الجماعي (Bulk Generation)
+// 4. الصفحة الرئيسية + التوليد الجماعي
 export default function Index() {
   const { products, hasApiKey } = useLoaderData<typeof loader>();
   const billingFetcher = useFetcher<typeof action>();
   
-  // حالة زر التوليد الجماعي
   const [isBulkScanning, setIsBulkScanning] = useState(false);
   const [bulkProgress, setBulkProgress] = useState(0);
 
-  // دالة التوليد الجماعي
   const startBulkScan = async () => {
     setIsBulkScanning(true);
-    // البحث عن المنتجات التي لم يتم توليد جداول لها بعد
     const productsMissingSpecs = products.filter(
       (p: any) => !(p.descriptionHtml || "").includes("📋")
     );
@@ -294,7 +286,6 @@ export default function Index() {
       formData.append("title", product.title);
       formData.append("imageUrl", product.featuredMedia?.preview?.image?.url || "");
 
-      // إرسال الطلب لإنشاء الجدول في الخلفية
       await fetch("?index", {
         method: "POST",
         body: formData,
@@ -303,13 +294,11 @@ export default function Index() {
       completed += 1;
       setBulkProgress(Math.round((completed / productsMissingSpecs.length) * 100));
       
-      // ✅ فاصل زمني لتجنب الحظر من خوادم Gemini
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
     setIsBulkScanning(false);
     setBulkProgress(0);
-    // إعادة تحميل الصفحة لإظهار النتائج الجديدة
     window.location.reload();
   };
 
@@ -335,7 +324,6 @@ export default function Index() {
                 </BlockStack>
                 
                 <InlineStack gap="200">
-                  {/* زر التوليد الجماعي السحري */}
                   <Button 
                     onClick={startBulkScan}
                     disabled={isBulkScanning}
