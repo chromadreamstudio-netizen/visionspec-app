@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "d6e7293ee0fc146d5199d1890cf722b8"
+client_id = "f7b565cbc9ea5bac2453bb0026d5e487"
 name = "beneficial-valuation-app"
 application_url = "https://visionspec-app-1.onrender.com"
 embedded = true
