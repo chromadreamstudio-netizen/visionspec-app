@@ -47,7 +47,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "generate");
 
-  // ✅ نظام الاشتراكات الآمن (مع تخطي حظر الـ iframe)
+  // ✅ نظام الاشتراكات الصحيح 100% حسب توثيق شوبيفاي
   if (intent === "upgrade") {
     try {
       await billing.require({
@@ -55,14 +55,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         isTest: true,
         onFailure: async () => billing.request({ plan: PREMIUM_PLAN, isTest: true }),
       });
+      // إذا كان مشتركاً بالفعل، نرسل رسالة نجاح
       return { success: true, message: "Subscription is already active! 🎉" }; 
     } catch (error: any) {
+      // شوبيفاي تستخدم Response لعمل Redirect، يجب أن نسمح له بالمرور
       if (error instanceof Response) {
-        // استخراج رابط الدفع من السيرفر وإرساله للواجهة لفتحه بأمان
-        const url = error.headers.get("Location") || error.headers.get("X-Shopify-API-Request-Failure-Reauthorize-Url");
-        if (url) {
-          return { redirectUrl: url };
-        }
+        throw error; 
       }
       return { success: false, error: "Billing redirect failed. Please try again." };
     }
@@ -258,12 +256,10 @@ export default function Index() {
   const { products, hasApiKey } = useLoaderData<typeof loader>();
   const billingFetcher = useFetcher<typeof action>();
   
-  // ✅ مراقب توجيه الفواتير (لإظهار التنبيهات أو فتح صفحة الدفع)
+  // ✅ مراقب توجيه الفواتير (لإظهار التنبيهات في حال كان الحساب مفعلاً)
   useEffect(() => {
     if (billingFetcher.data) {
-      if (billingFetcher.data.redirectUrl) {
-        window.open(billingFetcher.data.redirectUrl, "_top");
-      } else if (billingFetcher.data.success && billingFetcher.data.message) {
+      if (billingFetcher.data.success && billingFetcher.data.message) {
         alert(billingFetcher.data.message);
       } else if (billingFetcher.data.error) {
         alert("❌ Error: " + billingFetcher.data.error);
