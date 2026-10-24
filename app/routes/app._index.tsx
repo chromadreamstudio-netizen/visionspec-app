@@ -47,57 +47,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "generate");
 
-  // 🔥 الحل الجذري النهائي للفوترة (مخاطبة شوبيفاي مباشرة عبر GraphQL) 🔥
+  // 🔥 الحل الجذري النهائي للفوترة (استخدام نظام شوبيفاي الرسمي) 🔥
   if (intent === "upgrade") {
     try {
       // فحص ما إذا كان التاجر يمتلك اشتراكاً بالفعل
       await billing.require({ plans: [PREMIUM_PLAN], isTest: true });
       return { success: true, message: "Subscription is already active! 🎉" };
-    } catch (err) {
-      // إذا لم يكن يمتلك اشتراك، ننشئ الفاتورة ونجلب الرابط مباشرة
+    } catch (err: any) {
+      // إذا لم يكن يمتلك اشتراكاً، نطلب من شوبيفاي إنشاء فاتورة رسمية
       try {
         const storeName = session.shop.split(".")[0];
-        // ✅ تم إضافة الـ -10 هنا ليطابق مسار التثبيت الدائم
         const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/visionspec-pro-ai`;
 
-        const subResponse = await admin.graphql(
-          `#graphql
-          mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $lineItems: [AppSubscriptionLineItemInput!]!, $test: Boolean) {
-            appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
-              userErrors { message }
-              confirmationUrl
-            }
-          }`,
-          {
-            variables: {
-              name: PREMIUM_PLAN,
-              returnUrl: returnUrl,
-              test: true,
-              lineItems: [
-                {
-                  plan: {
-                    appRecurringPricingDetails: {
-                      price: { amount: 19.00, currencyCode: "USD" },
-                      interval: "EVERY_30_DAYS"
-                    }
-                  }
-                }
-              ]
-            }
+        await billing.request({
+          plan: PREMIUM_PLAN,
+          isTest: true,
+          returnUrl: returnUrl,
+        });
+      } catch (billingResponse: any) {
+        // التقاط الرابط الرسمي للتوجيه
+        if (billingResponse instanceof Response) {
+          const redirectUrl = 
+             billingResponse.headers.get("X-Shopify-API-Request-Failure-Reauthorize-Url") || 
+             billingResponse.headers.get("Location");
+             
+          if (redirectUrl) {
+            return { redirectUrl };
           }
-        );
-
-        const subData = await subResponse.json();
-        const confirmationUrl = subData.data?.appSubscriptionCreate?.confirmationUrl;
-
-        if (confirmationUrl) {
-          return { redirectUrl: confirmationUrl };
-        } else {
-          const errs = subData.data?.appSubscriptionCreate?.userErrors?.map((e:any) => e.message).join(", ");
-          return { success: false, error: errs || "Failed to generate billing link from Shopify API." };
         }
-      } catch (gqlErr: any) {
-        return { success: false, error: "GraphQL execution failed." };
+        return { success: false, error: "Failed to generate billing link." };
       }
     }
   }
