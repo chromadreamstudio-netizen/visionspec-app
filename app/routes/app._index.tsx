@@ -58,7 +58,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       try {
         const storeName = session.shop.split(".")[0];
         // ✅ تم إضافة الـ -10 هنا ليطابق مسار التثبيت الدائم
-        const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/beneficial-valuation-app-10`;
+        const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/visionspec-pro-ai`;
 
         const subResponse = await admin.graphql(
           `#graphql
