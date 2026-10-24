@@ -57,7 +57,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       // إذا لم يكن يمتلك اشتراك، ننشئ الفاتورة ونجلب الرابط مباشرة
       try {
         const storeName = session.shop.split(".")[0];
-        const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/beneficial-valuation-app`;
+        // ✅ تم إضافة الـ -10 هنا ليطابق مسار التثبيت الدائم
+        const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/beneficial-valuation-app-10`;
 
         const subResponse = await admin.graphql(
           `#graphql
