@@ -47,36 +47,66 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "generate");
 
-  // 🔥 الحل الجذري النهائي للفوترة (استخدام نظام شوبيفاي الرسمي) 🔥
+  // 🔥 نظام الفوترة المضمون عبر GraphQL الرسمي لـ Shopify 🔥
   if (intent === "upgrade") {
     try {
-      // فحص ما إذا كان التاجر يمتلك اشتراكاً بالفعل
-      await billing.require({ plans: [PREMIUM_PLAN], isTest: true });
-      return { success: true, message: "Subscription is already active! 🎉" };
-    } catch (err: any) {
-      // إذا لم يكن يمتلك اشتراكاً، نطلب من شوبيفاي إنشاء فاتورة رسمية
-      try {
-        const storeName = session.shop.split(".")[0];
-        const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/visionspec-pro-ai`;
+      const storeName = session.shop.split(".")[0];
+      const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/visionspec-pro-ai`;
 
-        await billing.request({
-          plan: PREMIUM_PLAN,
-          isTest: true,
-          returnUrl: returnUrl,
-        });
-      } catch (billingResponse: any) {
-        // التقاط الرابط الرسمي للتوجيه
-        if (billingResponse instanceof Response) {
-          const redirectUrl = 
-             billingResponse.headers.get("X-Shopify-API-Request-Failure-Reauthorize-Url") || 
-             billingResponse.headers.get("Location");
-             
-          if (redirectUrl) {
-            return { redirectUrl };
+      const subResponse = await admin.graphql(
+        `#graphql
+        mutation AppSubscriptionCreate($name: String!, $lineItems: [AppSubscriptionLineItemInput!]!, $returnUrl: URL!, $test: Boolean!) {
+          appSubscriptionCreate(name: $name, returnUrl: $returnUrl, lineItems: $lineItems, test: $test) {
+            userErrors {
+              field
+              message
+            }
+            confirmationUrl
+            appSubscription {
+              id
+            }
           }
+        }`,
+        {
+          variables: {
+            name: String(PREMIUM_PLAN || "VisionSpec Pro"),
+            returnUrl: returnUrl,
+            test: true,
+            lineItems: [
+              {
+                plan: {
+                  appRecurringPricingDetails: {
+                    price: { amount: 19.0, currencyCode: "USD" },
+                    interval: "EVERY_30_DAYS",
+                  },
+                },
+              },
+            ],
+          },
         }
-        return { success: false, error: "Failed to generate billing link." };
+      );
+
+      const subData = await subResponse.json();
+      const result = subData?.data?.appSubscriptionCreate;
+
+      if (result?.confirmationUrl) {
+        return { redirectUrl: result.confirmationUrl };
+      } else {
+        const errs = result?.userErrors?.map((e: any) => e.message).join(" | ");
+        return {
+          success: false,
+          error: errs || "Unexpected response: " + JSON.stringify(subData),
+        };
       }
+    } catch (gqlErr: any) {
+      // في حال رمى شوبيفاي Response لإعادة التوجيه التلقائي
+      if (gqlErr instanceof Response) {
+        throw gqlErr;
+      }
+      return {
+        success: false,
+        error: "Billing Error: " + (gqlErr?.message || JSON.stringify(gqlErr)),
+      };
     }
   }
 
@@ -115,7 +145,7 @@ Generate clean HTML (no markdown) containing:
 
         for (const model of modelsToTry) {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000); 
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
 
           try {
             const geminiRes = await fetch(
@@ -159,7 +189,7 @@ Generate clean HTML (no markdown) containing:
       Arabic: { specs: "📋 المواصفات الفنية", model: "طراز المنتج", mat: "المادة الأساسية", matVal: "مواد صديقة للبيئة وآمنة", stat: "الفحص البصري", statVal: "تم التحقق بواسطة VisionSpec AI", care: "العناية والصيانة", careVal: "سطح سهل المسح والتنظيف", war: "الضمان والجودة", warVal: "ضمان جودة لمدة 12 شهراً", safe: "🛡️ امتثال السلامة الأوروبي (EU GPSR)", safeMsg: "ملاحظة سلامة: يُحفظ بعيداً عن اللهب. متوافق مع معايير السلامة الأوروبية 2023/988." },
       Turkish: { specs: "📋 Teknik Özellikler", model: "Ürün Modeli", mat: "Ana Malzeme", matVal: "Çevre Dostu Kompozit", stat: "Görsel Denetim", statVal: "VisionSpec AI ile Doğrulandı", care: "Bakım", careVal: "Kolay temizlenebilir yüzey", war: "Garanti", warVal: "12 Aylık Garanti", safe: "🛡️ AB GPSR Güvenlik Uyumluluğu", safeMsg: "Güvenlik Uyarısı: Açık alevden uzak tutun. AB 2023/988 standartlarına uygundur." }
     };
-    
+
     const lang = t[outputLanguage] || t["English"];
 
     if (!generatedHtml) {
@@ -269,7 +299,7 @@ function ProductRow({ product }: { product: any }) {
 export default function Index() {
   const { products, hasApiKey } = useLoaderData<typeof loader>();
   const billingFetcher = useFetcher<typeof action>();
-  
+
   // ✅ استلام الرابط وفتحه بسلام تام
   useEffect(() => {
     if (billingFetcher.data) {
@@ -313,7 +343,7 @@ export default function Index() {
 
       completed += 1;
       setBulkProgress(Math.round((completed / productsMissingSpecs.length) * 100));
-      
+
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
@@ -338,9 +368,9 @@ export default function Index() {
               Current Plan: <strong>VisionSpec Pro ($19/mo)</strong>
             </div>
           </div>
-          
+
           <div style={{ display: "flex", gap: "10px" }}>
-            <button 
+            <button
               onClick={startBulkScan}
               disabled={isBulkScanning}
               style={{ backgroundColor: isBulkScanning ? "#6d7175" : "#1a1a1a", color: "#ffffff", border: "none", padding: "9px 16px", borderRadius: "8px", cursor: isBulkScanning ? "not-allowed" : "pointer", fontWeight: 600, fontSize: "13px" }}
