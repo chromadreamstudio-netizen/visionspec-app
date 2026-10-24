@@ -4,12 +4,10 @@ import {
   AppDistribution,
   shopifyApp,
   BillingInterval,
-  DeliveryMethod, // ✅ أضفنا هذه لاستخدامها في الـ Webhooks
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 
-// ✅ استخدام اسم باقة قياسي لضمان قبوله فوراً من خوادم شوبيفاي
 export const PREMIUM_PLAN = "Premium Plan";
 
 const shopify = shopifyApp({
@@ -21,8 +19,8 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  
-  // ✅ هيكل دفع معتمد ورسمي
+
+  // ✅ هيكل الفوترة الرسمي
   billing: {
     [PREMIUM_PLAN]: {
       lineItems: [
@@ -35,17 +33,13 @@ const shopify = shopifyApp({
     },
   },
 
-  // ✅ إضافة الـ Webhooks المطلوبة أساسياً لمراجعة شوبيفاي
-  webhooks: {
-    APP_UNINSTALLED: {
-      deliveryMethod: DeliveryMethod.Http,
-      callbackUrl: "/webhooks",
-    },
-  },
+  // ملاحظة مهمة: الـ Webhooks معرفة بالفعل في shopify.app.toml 
+  // حذفناها من هنا لمنع فشل إنشاء الجلسة (403) أثناء المصادقة
 
   future: {
-    unstable_newEmbeddedAuthStrategy: true,
+    expiringOfflineAccessTokens: true,
   },
+
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
@@ -55,7 +49,6 @@ export default shopify;
 export const apiVersion = shopify.apiVersion;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 export const authenticate = shopify.authenticate;
-// ✅ تم إصلاح الخطأ البرمجي هنا
 export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
