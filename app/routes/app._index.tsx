@@ -43,7 +43,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 // 2. معالجة الذكاء الاصطناعي واللغات والفواتير
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, billing, session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "generate");
 
@@ -51,7 +51,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "upgrade") {
     try {
       const storeName = session.shop.split(".")[0];
-      const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/visionspec-pro-ai`;
+      const returnUrl = `https://admin.shopify.com/store/${storeName}/apps/visionspec-pro-ai/app`;
 
       const subResponse = await admin.graphql(
         `#graphql
@@ -99,7 +99,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         };
       }
     } catch (gqlErr: any) {
-      // في حال رمى شوبيفاي Response لإعادة التوجيه التلقائي
       if (gqlErr instanceof Response) {
         throw gqlErr;
       }

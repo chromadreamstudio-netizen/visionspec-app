@@ -33,12 +33,7 @@ const shopify = shopifyApp({
     },
   },
 
-  // ملاحظة مهمة: الـ Webhooks معرفة بالفعل في shopify.app.toml 
-  // حذفناها من هنا لمنع فشل إنشاء الجلسة (403) أثناء المصادقة
-
-  future: {
-    expiringOfflineAccessTokens: true,
-  },
+  future: {},
 
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
